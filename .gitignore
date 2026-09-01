@@ -2,3 +2,6 @@ node_modules/
 dist/
 .env
 *.log
+
+# Se regenera con `npm run demo`; su contenido depende de si hay ANTHROPIC_API_KEY.
+demo-transcript.md

@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { formatMarginReply } from '../teams/message-formatter';
-import { BotCapability } from './bot-capability.interface';
+import { BotCapability, CapabilityContext } from './bot-capability.interface';
+import { ConversationMemoryService } from './conversation-memory.service';
 import { parseAmount } from './parse-amount.util';
 
 // Precio de costo: "cuesta 34000", "costo 34.000", "compra a 34000", "pagué 34000".
@@ -23,11 +24,13 @@ const SALE_RE =
 export class MarginCalculatorCapability implements BotCapability {
   readonly name = 'margin-calculator';
 
-  canHandle(text: string): boolean {
+  constructor(private readonly memory: ConversationMemoryService) {}
+
+  canHandle(text: string, _ctx: CapabilityContext): boolean {
     return this.extract(text) !== undefined;
   }
 
-  async handle(text: string, _sellerId: string): Promise<string> {
+  async handle(text: string, ctx: CapabilityContext): Promise<string> {
     const parsed = this.extract(text);
     if (!parsed) {
       // canHandle ya lo filtró; defensivo por si se llama directo.
@@ -35,15 +38,12 @@ export class MarginCalculatorCapability implements BotCapability {
     }
 
     const { cost, sale } = parsed;
-    const profit = sale - cost;
-
-    return formatMarginReply({
-      cost,
-      sale,
-      profit,
-      marginOnSalePct: (profit / sale) * 100,
-      markupOnCostPct: (profit / cost) * 100,
+    this.memory.update(ctx.conversationId, {
+      lastIntent: 'margin',
+      lastMargin: { cost, sale },
     });
+
+    return formatMarginReply(computeMargin(cost, sale));
   }
 
   /** Devuelve { cost, sale } solo si ambos montos están claros. */
@@ -58,4 +58,16 @@ export class MarginCalculatorCapability implements BotCapability {
 
     return { cost, sale };
   }
+}
+
+/** Cálculo de margen — compartido con FollowUpCapability. */
+export function computeMargin(cost: number, sale: number) {
+  const profit = sale - cost;
+  return {
+    cost,
+    sale,
+    profit,
+    marginOnSalePct: (profit / sale) * 100,
+    markupOnCostPct: (profit / cost) * 100,
+  };
 }

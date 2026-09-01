@@ -15,16 +15,21 @@ src/
 ├── stock/           # Consulta de stock con cache corto (ver StockService).
 ├── sales/           # Cálculo de comisión/margen — la tasa es siempre un
 │                     # parámetro, nunca un valor fijo (ver ADR-002).
-├── bot-capabilities/ # Router de capacidades (ADR-003): cada cosa que el bot
-│                     # sabe hacer es una BotCapability independiente
-│                     # (stock, comisión del mes, margen costo/venta,
-│                     # proyección de venta). El router prueba canHandle en
-│                     # orden y usa la primera que matchea; si ninguna, ayuda.
+├── bot-capabilities/ # Router de capacidades (ADR-003 + ADR-005). Cada cosa
+│                     # que el bot sabe hacer es una BotCapability: stock,
+│                     # comisión del mes, margen, proyección, seguimientos
+│                     # con memoria ("y si lo vendo 10% más caro"), y un
+│                     # fallback con Claude para lo que ninguna regla cubre.
+│                     # El router prueba canHandle en orden y usa la primera.
 ├── teams/           # Capa de entrada de Microsoft Teams (Bot Framework):
 │                     # webhook POST /api/messages; delega en el router.
 ├── health/          # Endpoint GET /health (@nestjs/terminus) para el
 │                     # balanceador de carga — verifica la conexión a MySQL.
 └── tenants/         # Entidades TypeORM: Tenant y Salesperson.
+
+scripts/
+└── demo-conversation.ts  # `npm run demo`: recorre una conversación completa
+                          # contra el bot y guarda demo-transcript.md.
 ```
 
 La capa de Teams (`src/teams/`) es solo **entrada**: recibe la actividad del bot y la pasa al `CapabilityRouter`. Cada capacidad (`src/bot-capabilities/`) reutiliza la lógica que ya existe (`IntentParserService`, `StockService`, `SalesService`) — no reimplementa parseo ni cálculo. Agregar una capacidad nueva es una clase nueva en la lista, sin tocar las demás ni el router (ver ADR-003). Los endpoints HTTP directos (`GET /stock`, `GET /sales/:sellerId/summary`) siguen disponibles para pruebas.
@@ -71,7 +76,8 @@ corre en modo anónimo.
    (o el ícono de engranaje del chat) poné **User ID = `seller-1`**, que es el
    vendedor con ventas de ejemplo cargadas (`src/adapters/mock/mock-sales.adapter.ts`).
 
-Mensajes de prueba — una por cada capacidad del router (ADR-003):
+Mensajes de prueba — una por cada capacidad del router (ADR-003 + ADR-005).
+Las de `follow-up` dependen de lo que se preguntó **antes** en el mismo hilo:
 
 | Escribís | Capacidad | Qué hace |
 | --- | --- | --- |
@@ -80,10 +86,28 @@ Mensajes de prueba — una por cada capacidad del router (ADR-003):
 | `cuánto gané este mes con 8% de comisión` | `commission-summary` | `parseSalesQuery` detecta el 8% → `SalesService.getMonthlySummary` → resumen real del mes |
 | `cuánto vendí este mes` | `commission-summary` | Rutea por palabra clave; sin `%` ni default guardado, pide el porcentaje (ADR-002) |
 | `cuesta 34.000 y lo vendo en 40.000, ¿qué margen me da?` | `margin-calculator` | Ganancia $6.000 · margen sobre venta 15,00% · markup sobre costo 17,65% |
+| ↳ `y si el costo sube a 36.000` | `follow-up` | Rehace el margen anterior con el nuevo costo (memoria del hilo) |
 | `cuánto ganaría si vendo 50 a 30.000 con 8% de comisión` | `sale-projection` | 50 × $30.000 = $1.500.000 → tu comisión sería $120.000 |
+| ↳ `y si lo vendo 10% más caro` | `follow-up` | Toma el precio unitario recordado, lo sube 10% y recalcula |
+| ↳ `y con 12% de comisión` | `follow-up` | Recalcula la proyección solo cambiando la tasa |
 | `si vendo 3 iPhone SE con 8% de comisión` | `sale-projection` | Sin precio en la frase: lo toma del stock (iPhone SE = $49.990) |
 | `si vendo 50 a 30.000` | `sale-projection` | Falta el % → responde pidiéndolo, no asume |
-| `hola` | — | Ninguna matchea → mensaje de ayuda con las 4 capacidades |
+| `¿le conviene el iPhone SE o el Galaxy A15 a un cliente que recién arranca?` | `ai-fallback` | Ninguna regla la cubre → la responde Claude (si hay `ANTHROPIC_API_KEY`) |
+| `hola` | — | Ninguna capacidad matchea y no hay IA → mensaje de ayuda |
+
+### Demo de una conversación entera
+
+Con el bot corriendo (`npm run start:dev`), en otra terminal:
+
+```bash
+npm run demo
+```
+
+Manda una conversación completa contra `POST /api/messages` en un solo hilo
+(una pregunta por capacidad + los seguimientos con memoria + preguntas
+abiertas), imprime cada intercambio con colores y guarda el transcript en
+`demo-transcript.md`. Las preguntas abiertas solo las contesta la IA si hay
+`ANTHROPIC_API_KEY` en el `.env`; sin eso responden el mensaje de ayuda.
 
 ### Probarlo sin el Emulator (curl)
 
@@ -157,6 +181,9 @@ configurarse como health check del balanceador / servicio de contenedores.
 | `TEAMS_APP_PASSWORD` | para Teams real | vacío | Client secret del bot — desde el secret manager. |
 | `TEAMS_APP_TYPE` | no | `MultiTenant` | `MultiTenant` / `SingleTenant` / `UserAssignedMSI`. |
 | `TEAMS_APP_TENANT_ID` | si `SingleTenant` | vacío | Tenant de Azure AD del bot. |
+| `ANTHROPIC_API_KEY` | no | vacío | Habilita el fallback con IA (ADR-005). Sin ella, las preguntas fuera de patrón responden el mensaje de ayuda. |
+| `ANTHROPIC_MODEL` | no | `claude-haiku-4-5` | Modelo del fallback. El default es el más barato. |
+| `ANTHROPIC_WORKSPACE_ID` | si la key es de workspace | vacío | ID del workspace (`wrkspc_...`) para API keys asociadas a uno. |
 
 > **Nota:** hoy TypeORM corre con `synchronize: true` (crea/ajusta tablas al
 > arrancar), práctico para el portafolio. Para un despliegue productivo real hay

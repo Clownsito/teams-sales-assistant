@@ -1,6 +1,10 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { HELP_TEXT } from '../teams/message-formatter';
-import { BOT_CAPABILITIES, BotCapability } from './bot-capability.interface';
+import {
+  BOT_CAPABILITIES,
+  BotCapability,
+  CapabilityContext,
+} from './bot-capability.interface';
 
 /**
  * Prueba las capacidades en orden y delega en la primera que reconozca el
@@ -14,14 +18,14 @@ export class CapabilityRouter {
     @Inject(BOT_CAPABILITIES) private readonly capabilities: BotCapability[],
   ) {}
 
-  async route(text: string, sellerId: string): Promise<string> {
+  async route(text: string, ctx: CapabilityContext): Promise<string> {
     const trimmed = text.trim();
     if (!trimmed) return HELP_TEXT;
 
     for (const capability of this.capabilities) {
-      if (capability.canHandle(trimmed)) {
+      if (capability.canHandle(trimmed, ctx)) {
         this.logger.log(`"${trimmed}" -> ${capability.name}`);
-        return capability.handle(trimmed, sellerId);
+        return capability.handle(trimmed, ctx);
       }
     }
 

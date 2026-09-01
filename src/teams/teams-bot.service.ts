@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ActivityHandler, MessageFactory, TurnContext } from 'botbuilder';
 import { CapabilityRouter } from '../bot-capabilities/capability-router.service';
+import { CapabilityContext } from '../bot-capabilities/bot-capability.interface';
 import { WELCOME_TEXT } from './message-formatter';
 
 /**
@@ -18,10 +19,14 @@ export class TeamsBotService extends ActivityHandler {
 
     this.onMessage(async (context, next) => {
       const text = (TurnContext.removeRecipientMention(context.activity) ?? '').trim();
-      const sellerId = context.activity.from?.id ?? 'unknown';
-      this.logger.log(`Mensaje de ${sellerId}: "${text}"`);
+      const ctx: CapabilityContext = {
+        sellerId: context.activity.from?.id ?? 'unknown',
+        // El hilo de Teams es la clave de la memoria de conversación (ADR-005).
+        conversationId: context.activity.conversation?.id ?? 'sin-conversacion',
+      };
+      this.logger.log(`Mensaje de ${ctx.sellerId} en ${ctx.conversationId}: "${text}"`);
 
-      const reply = await this.buildReply(text, sellerId);
+      const reply = await this.buildReply(text, ctx);
       await context.sendActivity(MessageFactory.text(reply));
       await next();
     });
@@ -41,7 +46,7 @@ export class TeamsBotService extends ActivityHandler {
    * Punto de entrada testeable: delega en el router. Se mantiene como método
    * propio para poder probar el ruteo sin levantar el SDK del bot.
    */
-  async buildReply(text: string, sellerId: string): Promise<string> {
-    return this.router.route(text, sellerId);
+  async buildReply(text: string, ctx: CapabilityContext): Promise<string> {
+    return this.router.route(text, ctx);
   }
 }

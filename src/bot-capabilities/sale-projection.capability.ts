@@ -2,8 +2,9 @@ import { Injectable } from '@nestjs/common';
 import { IntentParserService } from '../intent/intent-parser.service';
 import { StockService } from '../stock/stock.service';
 import { BOT_TENANT_ID } from '../teams/teams.constants';
-import { formatProjectionReply } from '../teams/message-formatter';
-import { BotCapability } from './bot-capability.interface';
+import { formatProjectionReply, ProjectionResult } from '../teams/message-formatter';
+import { BotCapability, CapabilityContext } from './bot-capability.interface';
+import { ConversationMemoryService } from './conversation-memory.service';
 import { parseAmount } from './parse-amount.util';
 
 // Solo una proyección explícitamente hipotética ("si vendo...", "proyección",
@@ -32,13 +33,14 @@ export class SaleProjectionCapability implements BotCapability {
   constructor(
     private readonly intentParser: IntentParserService,
     private readonly stockService: StockService,
+    private readonly memory: ConversationMemoryService,
   ) {}
 
-  canHandle(text: string): boolean {
+  canHandle(text: string, _ctx: CapabilityContext): boolean {
     return PROJECTION_INTENT_RE.test(text) && /\d/.test(text);
   }
 
-  async handle(text: string, _sellerId: string): Promise<string> {
+  async handle(text: string, ctx: CapabilityContext): Promise<string> {
     // Sacar el "8%" del texto para que no se confunda con la cantidad o el precio.
     const withoutPercent = text.replace(/\d+(?:[.,]\d+)?\s*%/g, ' ');
 
@@ -66,17 +68,17 @@ export class SaleProjectionCapability implements BotCapability {
       return '¿Con qué % de comisión? Ej. "si vendo 50 a 30.000 con 8% de comisión".';
     }
 
-    const totalRevenue = quantity * unitPrice;
-    const commissionAmount = Math.round(totalRevenue * commissionRate * 100) / 100;
-
-    return formatProjectionReply({
-      quantity,
-      unitPrice,
-      commissionRate,
-      totalRevenue,
-      commissionAmount,
-      priceSource,
+    this.memory.update(ctx.conversationId, {
+      lastIntent: 'projection',
+      lastQuantity: quantity,
+      lastUnitPrice: unitPrice,
+      lastCommissionRate: commissionRate,
+      lastProduct: priceSource ? { name: priceSource, price: unitPrice } : undefined,
     });
+
+    return formatProjectionReply(
+      computeProjection(quantity, unitPrice, commissionRate, priceSource),
+    );
   }
 
   private parseQuantity(text: string): number | undefined {
@@ -99,4 +101,16 @@ export class SaleProjectionCapability implements BotCapability {
     const found = catalog.find((item) => haystack.includes(item.name.toLowerCase()));
     return found ? { name: found.name, price: found.price } : undefined;
   }
+}
+
+/** Cálculo de proyección — compartido con FollowUpCapability. */
+export function computeProjection(
+  quantity: number,
+  unitPrice: number,
+  commissionRate: number,
+  priceSource?: string,
+): ProjectionResult {
+  const totalRevenue = quantity * unitPrice;
+  const commissionAmount = Math.round(totalRevenue * commissionRate * 100) / 100;
+  return { quantity, unitPrice, commissionRate, totalRevenue, commissionAmount, priceSource };
 }

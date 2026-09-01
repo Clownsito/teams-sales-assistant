@@ -1,6 +1,8 @@
 import { HELP_TEXT } from '../teams/message-formatter';
-import { BotCapability } from './bot-capability.interface';
+import { BotCapability, CapabilityContext } from './bot-capability.interface';
 import { CapabilityRouter } from './capability-router.service';
+
+const CTX: CapabilityContext = { sellerId: 'seller-1', conversationId: 'c1' };
 
 function fakeCapability(
   name: string,
@@ -20,10 +22,10 @@ describe('CapabilityRouter', () => {
     const second = fakeCapability('second', true);
     const router = new CapabilityRouter([first, second]);
 
-    const reply = await router.route('hola', 'seller-1');
+    const reply = await router.route('hola', CTX);
 
     expect(reply).toBe('respuesta de first');
-    expect(first.handle).toHaveBeenCalledWith('hola', 'seller-1');
+    expect(first.handle).toHaveBeenCalledWith('hola', CTX);
     expect(second.canHandle).not.toHaveBeenCalled();
     expect(second.handle).not.toHaveBeenCalled();
   });
@@ -33,7 +35,7 @@ describe('CapabilityRouter', () => {
     const chosen = fakeCapability('chosen', true);
     const router = new CapabilityRouter([skipped, chosen]);
 
-    const reply = await router.route('hola', 'seller-1');
+    const reply = await router.route('hola', CTX);
 
     expect(skipped.handle).not.toHaveBeenCalled();
     expect(chosen.handle).toHaveBeenCalled();
@@ -46,14 +48,14 @@ describe('CapabilityRouter', () => {
       fakeCapability('b', false),
     ]);
 
-    expect(await router.route('algo raro', 'seller-1')).toBe(HELP_TEXT);
+    expect(await router.route('algo raro', CTX)).toBe(HELP_TEXT);
   });
 
   it('devuelve el mensaje de ayuda si el texto viene vacío, sin probar capacidades', async () => {
     const only = fakeCapability('only', true);
     const router = new CapabilityRouter([only]);
 
-    expect(await router.route('   ', 'seller-1')).toBe(HELP_TEXT);
+    expect(await router.route('   ', CTX)).toBe(HELP_TEXT);
     expect(only.canHandle).not.toHaveBeenCalled();
   });
 });
