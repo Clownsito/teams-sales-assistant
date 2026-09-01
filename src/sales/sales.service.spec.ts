@@ -2,6 +2,12 @@ import { BadRequestException } from '@nestjs/common';
 import { SalesService } from './sales.service';
 import { MockSalesAdapter } from '../adapters/mock/mock-sales.adapter';
 
+/** El mock genera ventas en el mes en curso; el test pide ese mismo mes. */
+function currentMonth(): string {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+}
+
 describe('SalesService', () => {
   function buildService(salespersonRepo: any) {
     return new SalesService(new MockSalesAdapter(), salespersonRepo);
@@ -11,9 +17,9 @@ describe('SalesService', () => {
     const repo = { findOne: jest.fn() };
     const service = buildService(repo);
 
-    const summary = await service.getMonthlySummary('seller-1', '2026-08', 0.08);
+    const summary = await service.getMonthlySummary('seller-1', currentMonth(), 0.08);
 
-    // ventas de seller-1 en agosto (mock): 21990 + 34990 + 89990 = 146970
+    // ventas de seller-1 en el mes actual (mock): 21990 + 34990 + 89990 = 146970
     expect(summary.grossSales).toBe(146970);
     expect(summary.commissionRateUsed).toBe(0.08);
     expect(summary.commissionAmount).toBeCloseTo(146970 * 0.08, 2);
@@ -25,7 +31,7 @@ describe('SalesService', () => {
     const repo = { findOne: jest.fn().mockResolvedValue({ defaultCommissionRate: '0.05' }) };
     const service = buildService(repo);
 
-    const summary = await service.getMonthlySummary('seller-1', '2026-08');
+    const summary = await service.getMonthlySummary('seller-1', currentMonth());
 
     expect(summary.commissionRateUsed).toBe(0.05);
   });
@@ -34,6 +40,8 @@ describe('SalesService', () => {
     const repo = { findOne: jest.fn().mockResolvedValue(null) };
     const service = buildService(repo);
 
-    await expect(service.getMonthlySummary('seller-1', '2026-08')).rejects.toThrow(BadRequestException);
+    await expect(service.getMonthlySummary('seller-1', currentMonth())).rejects.toThrow(
+      BadRequestException,
+    );
   });
 });

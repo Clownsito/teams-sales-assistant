@@ -19,7 +19,7 @@ Dos piezas nuevas dentro de `src/bot-capabilities/`:
 
 ### 1. `ConversationMemoryService` + `FollowUpCapability`
 
-- **`ConversationMemoryService`**: store en memoria del proceso, con TTL de 30 min por inactividad, indexado por el `conversation.id` de Teams. Guarda un **resumen del último cálculo** (intención, cantidad, precio unitario, tasa, costo/venta, producto), no un historial de mensajes.
+- **`ConversationMemoryService`**: store en memoria del proceso, con TTL de 30 min por inactividad, indexado por el `conversation.id` de Teams. Guarda dos cosas: (a) un **resumen estructurado del último cálculo** (intención, cantidad, precio unitario, tasa, costo/venta, producto) que usan los seguimientos por reglas, y (b) un **historial corto de los últimos mensajes** (hasta 10 intercambios usuario↔bot, cada uno recortado), que el router graba en cada turno y que el fallback de IA reenvía como mensajes previos para sostener una racha de preguntas abiertas relacionadas.
 - Las capacidades de cálculo (stock, comisión, margen, proyección) escriben ese resumen al responder.
 - **`FollowUpCapability`** va **primera** en el orden del router. Reconoce ajustes sobre lo último ("y si...", "y con...", "10% más caro", "el costo sube a X") y **rehace el último cálculo** con el cambio, reusando el mismo cálculo y formato que la capacidad original. Si no hay nada recordado o el ajuste no se entiende, no matchea.
 
