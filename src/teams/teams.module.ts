@@ -1,18 +1,16 @@
 import { Module } from '@nestjs/common';
-import { IntentModule } from '../intent/intent.module';
-import { StockModule } from '../stock/stock.module';
-import { SalesModule } from '../sales/sales.module';
+import { BotCapabilitiesModule } from '../bot-capabilities/bot-capabilities.module';
 import { TeamsController } from './teams.controller';
 import { TeamsBotService } from './teams-bot.service';
 import { teamsAdapterProvider } from './teams.adapter';
 
 /**
- * Capa de entrada de Microsoft Teams (Bot Framework). Reutiliza tal cual
- * IntentParserService, StockService y SalesService — este módulo solo
- * traduce mensajes del bot a llamadas sobre esos servicios.
+ * Capa de entrada de Microsoft Teams (Bot Framework). Traduce actividades del
+ * bot a llamadas sobre el CapabilityRouter (ADR-003); toda la lógica vive en
+ * las capacidades de BotCapabilitiesModule.
  */
 @Module({
-  imports: [IntentModule, StockModule, SalesModule],
+  imports: [BotCapabilitiesModule],
   controllers: [TeamsController],
   providers: [teamsAdapterProvider, TeamsBotService],
 })

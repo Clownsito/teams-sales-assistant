@@ -10,17 +10,29 @@ import { ParsedStockQuery } from '../intent/intent-parser.service';
  */
 
 const clp = new Intl.NumberFormat('es-CL');
-const money = (value: number): string => `$${clp.format(value)}`;
+const money = (value: number): string =>
+  value < 0 ? `-$${clp.format(Math.abs(value))}` : `$${clp.format(value)}`;
+
+const pctFmt = new Intl.NumberFormat('es-CL', {
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+});
+const percent = (value: number): string => `${pctFmt.format(value)}%`;
 
 export const HELP_TEXT = [
-  'No entendí la consulta. Puedo ayudarte con dos cosas:',
-  '• **Stock por precio** — ej. "teléfonos entre 20.000 y 50.000" o "qué hay bajo 30000".',
+  'No entendí la consulta. Puedo ayudarte con cuatro cosas:',
+  '• **Stock por precio** — ej. "teléfonos entre 20.000 y 50.000".',
   '• **Tu comisión del mes** — ej. "cuánto gané este mes con 8% de comisión".',
+  '• **Margen costo/venta** — ej. "cuesta 34.000 y lo vendo en 40.000, ¿qué margen me da?".',
+  '• **Proyección de venta** — ej. "cuánto ganaría si vendo 50 a 30.000 con 8% de comisión".',
 ].join('\n');
 
 export const WELCOME_TEXT = [
-  '¡Hola! Soy el asistente de ventas.',
-  'Pregúntame por stock en un rango de precio, o por tu comisión del mes indicando el porcentaje.',
+  '¡Hola! Soy el asistente de ventas. Puedo ayudarte con:',
+  '• Stock por rango de precio.',
+  '• Tu comisión del mes (indicá el %).',
+  '• Margen entre precio de costo y de venta.',
+  '• Proyección: cuánto ganarías vendiendo N unidades a tal precio con tal % de comisión.',
 ].join('\n');
 
 function describeRange(query: ParsedStockQuery): string {
@@ -59,5 +71,49 @@ export function formatSalesReply(summary: CommissionSummary): string {
     `• Ventas brutas: ${money(summary.grossSales)}`,
     `• Comisión (${pct}%): ${money(summary.commissionAmount)}`,
     `• Margen neto: ${money(summary.netMargin)}`,
+  ].join('\n');
+}
+
+export interface MarginResult {
+  cost: number;
+  sale: number;
+  profit: number;
+  marginOnSalePct: number; // ganancia / venta * 100
+  markupOnCostPct: number; // ganancia / costo * 100
+}
+
+export function formatMarginReply(result: MarginResult): string {
+  const lines = [
+    `Con costo ${money(result.cost)} y venta ${money(result.sale)}:`,
+    `• Ganancia: ${money(result.profit)}`,
+    `• Margen sobre venta: ${percent(result.marginOnSalePct)}`,
+    `• Markup sobre costo: ${percent(result.markupOnCostPct)}`,
+  ];
+  if (result.profit < 0) {
+    lines.push('⚠️ Estás vendiendo por debajo del costo.');
+  }
+  return lines.join('\n');
+}
+
+export interface ProjectionResult {
+  quantity: number;
+  unitPrice: number;
+  commissionRate: number;
+  totalRevenue: number; // cantidad * precio unitario
+  commissionAmount: number; // ingreso total * tasa — lo que se lleva el vendedor
+  priceSource?: string; // nombre del producto si el precio salió del stock
+}
+
+export function formatProjectionReply(result: ProjectionResult): string {
+  const pct = (result.commissionRate * 100).toFixed(2).replace(/\.?0+$/, '');
+  const priceNote = result.priceSource
+    ? ` (precio de "${result.priceSource}" tomado del stock)`
+    : '';
+
+  return [
+    `Proyección: ${result.quantity} × ${money(result.unitPrice)} = ${money(
+      result.totalRevenue,
+    )} en ventas${priceNote}.`,
+    `Con ${pct}% de comisión, tu ganancia sería ${money(result.commissionAmount)}.`,
   ].join('\n');
 }

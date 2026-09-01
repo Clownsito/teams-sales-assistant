@@ -15,13 +15,17 @@ src/
 ├── stock/           # Consulta de stock con cache corto (ver StockService).
 ├── sales/           # Cálculo de comisión/margen — la tasa es siempre un
 │                     # parámetro, nunca un valor fijo (ver ADR-002).
+├── bot-capabilities/ # Router de capacidades (ADR-003): cada cosa que el bot
+│                     # sabe hacer es una BotCapability independiente
+│                     # (stock, comisión del mes, margen costo/venta,
+│                     # proyección de venta). El router prueba canHandle en
+│                     # orden y usa la primera que matchea; si ninguna, ayuda.
 ├── teams/           # Capa de entrada de Microsoft Teams (Bot Framework):
-│                     # webhook POST /api/messages + ruteo de intención.
-│                     # Reutiliza intent/, stock/ y sales/ tal cual.
+│                     # webhook POST /api/messages; delega en el router.
 └── tenants/         # Entidades TypeORM: Tenant y Salesperson.
 ```
 
-La capa de Teams (`src/teams/`) es solo **entrada**: traduce el mensaje del vendedor a una llamada sobre `IntentParserService` + `StockService` / `SalesService` y devuelve el resultado formateado. No reimplementa parseo ni cálculo. Los mismos endpoints HTTP directos (`GET /stock`, `GET /sales/:sellerId/summary`) siguen disponibles para pruebas.
+La capa de Teams (`src/teams/`) es solo **entrada**: recibe la actividad del bot y la pasa al `CapabilityRouter`. Cada capacidad (`src/bot-capabilities/`) reutiliza la lógica que ya existe (`IntentParserService`, `StockService`, `SalesService`) — no reimplementa parseo ni cálculo. Agregar una capacidad nueva es una clase nueva en la lista, sin tocar las demás ni el router (ver ADR-003). Los endpoints HTTP directos (`GET /stock`, `GET /sales/:sellerId/summary`) siguen disponibles para pruebas.
 
 ## Requisitos
 
@@ -65,15 +69,19 @@ corre en modo anónimo.
    (o el ícono de engranaje del chat) poné **User ID = `seller-1`**, que es el
    vendedor con ventas de ejemplo cargadas (`src/adapters/mock/mock-sales.adapter.ts`).
 
-Mensajes de prueba:
+Mensajes de prueba — una por cada capacidad del router (ADR-003):
 
-| Escribís | Qué hace |
-| --- | --- |
-| `teléfonos entre 20.000 y 50.000` | `IntentParserService.parseStockQuery` → `StockService.queryStock` → lista formateada |
-| `qué hay bajo 30000` | Igual, solo con `maxPrice` |
-| `cuánto gané este mes con 8% de comisión` | `parseSalesQuery` detecta el 8% → `SalesService.getMonthlySummary` → resumen |
-| `cuánto vendí este mes` | Se rutea a ventas por palabra clave; sin `%` ni default guardado, responde pidiendo el porcentaje (ADR-002) |
-| `hola` | No reconoce intención → pide reformular |
+| Escribís | Capacidad | Qué hace |
+| --- | --- | --- |
+| `teléfonos entre 20.000 y 50.000` | `stock-lookup` | `parseStockQuery` → `StockService.queryStock` → lista formateada |
+| `qué hay bajo 30000` | `stock-lookup` | Igual, solo con `maxPrice` |
+| `cuánto gané este mes con 8% de comisión` | `commission-summary` | `parseSalesQuery` detecta el 8% → `SalesService.getMonthlySummary` → resumen real del mes |
+| `cuánto vendí este mes` | `commission-summary` | Rutea por palabra clave; sin `%` ni default guardado, pide el porcentaje (ADR-002) |
+| `cuesta 34.000 y lo vendo en 40.000, ¿qué margen me da?` | `margin-calculator` | Ganancia $6.000 · margen sobre venta 15,00% · markup sobre costo 17,65% |
+| `cuánto ganaría si vendo 50 a 30.000 con 8% de comisión` | `sale-projection` | 50 × $30.000 = $1.500.000 → tu comisión sería $120.000 |
+| `si vendo 3 iPhone SE con 8% de comisión` | `sale-projection` | Sin precio en la frase: lo toma del stock (iPhone SE = $49.990) |
+| `si vendo 50 a 30.000` | `sale-projection` | Falta el % → responde pidiéndolo, no asume |
+| `hola` | — | Ninguna matchea → mensaje de ayuda con las 4 capacidades |
 
 ### Probarlo sin el Emulator (curl)
 
