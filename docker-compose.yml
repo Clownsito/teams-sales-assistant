@@ -1,0 +1,33 @@
+# Levanta las dependencias locales del backend: MySQL para configuración de
+# tenants/vendedores, y Redis para el cache de consultas de stock.
+services:
+  mysql:
+    image: mysql:8.0
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: teams_sales_assistant
+      MYSQL_USER: teams_assistant
+      MYSQL_PASSWORD: change-me
+      MYSQL_ROOT_PASSWORD: change-me-root
+    ports:
+      # 3307 en el host: el 3306 ya lo tiene tomado tu MySQL de XAMPP.
+      - "3307:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    # MySQL tarda ~20s la primera vez en terminar su init process antes de
+    # aceptar conexiones — con esto "docker compose ps" solo marca "healthy"
+    # cuando ya puede recibirlas, en vez de tener que adivinar el timing.
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-u", "root", "-pchange-me-root"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+
+volumes:
+  mysql_data:
