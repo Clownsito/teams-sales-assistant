@@ -7,5 +7,6 @@ import { StockService } from './stock.service';
   imports: [AdaptersModule],
   controllers: [StockController],
   providers: [StockService],
+  exports: [StockService], // lo consume TeamsModule (capa de entrada del bot)
 })
 export class StockModule {}

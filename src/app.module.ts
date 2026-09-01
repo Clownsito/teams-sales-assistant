@@ -5,6 +5,7 @@ import { AdaptersModule } from './adapters/adapters.module';
 import { StockModule } from './stock/stock.module';
 import { SalesModule } from './sales/sales.module';
 import { TenantsModule } from './tenants/tenants.module';
+import { TeamsModule } from './teams/teams.module';
 import { Tenant } from './tenants/entities/tenant.entity';
 import { Salesperson } from './tenants/entities/salesperson.entity';
 
@@ -27,6 +28,7 @@ import { Salesperson } from './tenants/entities/salesperson.entity';
     TenantsModule,
     StockModule,
     SalesModule,
+    TeamsModule,
   ],
 })
 export class AppModule {}

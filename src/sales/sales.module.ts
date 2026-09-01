@@ -9,5 +9,6 @@ import { SalesService } from './sales.service';
   imports: [AdaptersModule, TypeOrmModule.forFeature([Salesperson])],
   controllers: [SalesController],
   providers: [SalesService],
+  exports: [SalesService], // lo consume TeamsModule (capa de entrada del bot)
 })
 export class SalesModule {}
