@@ -22,6 +22,8 @@ src/
 │                     # orden y usa la primera que matchea; si ninguna, ayuda.
 ├── teams/           # Capa de entrada de Microsoft Teams (Bot Framework):
 │                     # webhook POST /api/messages; delega en el router.
+├── health/          # Endpoint GET /health (@nestjs/terminus) para el
+│                     # balanceador de carga — verifica la conexión a MySQL.
 └── tenants/         # Entidades TypeORM: Tenant y Salesperson.
 ```
 
@@ -110,6 +112,55 @@ respuesta y el webhook devuelve `500` — con el Emulator esto no pasa.)
 ```bash
 npm test
 ```
+
+En cada push a `master` y en cada PR, GitHub Actions (`.github/workflows/ci.yml`)
+corre `npm ci`, `tsc --noEmit`, la build de producción y `npm test`.
+
+## Despliegue
+
+El proyecto se despliega como **contenedor Docker estándar**. El mismo artefacto
+corre igual en AWS (ECS/Fargate, App Runner, Elastic Beanstalk) que en Azure
+(Container Apps, App Service para contenedores); cuál proveedor y qué servicio
+puntual se usa se decide más adelante (ver [ADR-004](docs/adr/0004-preparacion-para-despliegue-en-la-nube.md)).
+
+### Construir y correr la imagen
+
+```bash
+docker build -t teams-sales-assistant .
+
+docker run --rm -p 3000:3000 --env-file .env teams-sales-assistant
+# o pasando las variables una por una con -e VAR=valor
+```
+
+La imagen es multi-stage: compila con las devDependencies y la imagen final
+(`node:20-alpine`) lleva solo `node_modules` de producción + `dist/`, corre como
+usuario `node` y trae un `HEALTHCHECK` que pega a `/health`.
+
+### Health check
+
+`GET /health` → `200` con `{"status":"ok",...}` si la app responde y MySQL
+contesta un ping; `503` si la base no está accesible. Es el endpoint que debe
+configurarse como health check del balanceador / servicio de contenedores.
+
+### Variables de entorno en producción
+
+| Variable | Requerida | Default | Descripción |
+| --- | --- | --- | --- |
+| `PORT` | no | `3000` | Puerto HTTP en el que escucha la app. |
+| `DB_HOST` | **sí** | `localhost` | Host de MySQL (una instancia administrada: RDS, Azure Database for MySQL, etc.). |
+| `DB_PORT` | no | `3306` | Puerto de MySQL. |
+| `DB_USER` | **sí** | `teams_assistant` | Usuario de MySQL. |
+| `DB_PASSWORD` | **sí** | `change-me` | Password de MySQL — inyectar desde el secret manager del proveedor, nunca en la imagen. |
+| `DB_NAME` | **sí** | `teams_sales_assistant` | Nombre de la base. |
+| `CACHE_TTL_SECONDS` | no | `300` | TTL del cache de stock. |
+| `TEAMS_APP_ID` | para Teams real | vacío | App ID del Bot Framework. Vacío = modo anónimo (solo sirve para el Emulator local). |
+| `TEAMS_APP_PASSWORD` | para Teams real | vacío | Client secret del bot — desde el secret manager. |
+| `TEAMS_APP_TYPE` | no | `MultiTenant` | `MultiTenant` / `SingleTenant` / `UserAssignedMSI`. |
+| `TEAMS_APP_TENANT_ID` | si `SingleTenant` | vacío | Tenant de Azure AD del bot. |
+
+> **Nota:** hoy TypeORM corre con `synchronize: true` (crea/ajusta tablas al
+> arrancar), práctico para el portafolio. Para un despliegue productivo real hay
+> que pasar a migraciones y poner `synchronize: false`.
 
 ## Siguientes pasos (ver ADR-001, ítems de acción)
 

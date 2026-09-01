@@ -1,0 +1,21 @@
+# Se instala dentro de la imagen con `npm ci`
+node_modules
+
+# Se compila dentro de la imagen con `npm run build`
+dist
+
+# Nunca copiar secretos ni estado local a la imagen
+.env
+*.log
+
+# Cosas que no hacen falta en runtime
+.git
+.github
+.gitignore
+docs
+docker-compose.yml
+Dockerfile
+.dockerignore
+coverage
+.vscode
+*.md

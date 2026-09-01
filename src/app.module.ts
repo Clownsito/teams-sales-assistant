@@ -6,6 +6,7 @@ import { StockModule } from './stock/stock.module';
 import { SalesModule } from './sales/sales.module';
 import { TenantsModule } from './tenants/tenants.module';
 import { TeamsModule } from './teams/teams.module';
+import { HealthModule } from './health/health.module';
 import { Tenant } from './tenants/entities/tenant.entity';
 import { Salesperson } from './tenants/entities/salesperson.entity';
 
@@ -29,6 +30,7 @@ import { Salesperson } from './tenants/entities/salesperson.entity';
     StockModule,
     SalesModule,
     TeamsModule,
+    HealthModule,
   ],
 })
 export class AppModule {}
